@@ -1,280 +1,194 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
-    
-    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
-    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
-    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"/>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
-    
-            <meta name="viewport" content="width=device-width,
-                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-            <style>
-                #map_dcbebdeaf6e98ff45e7dadd1b55c2ee1 {
-                    position: relative;
-                    width: 100.0%;
-                    height: 100.0%;
-                    left: 0.0%;
-                    top: 0.0%;
-                }
-                .leaflet-container { font-size: 1rem; }
-            </style>
+<meta charset="utf-8" />
+<title>レンタル・返却ポイント 距離計算（Undo対応）</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-            <style>html, body {
-                width: 100%;
-                height: 100%;
-                margin: 0;
-                padding: 0;
-            }
-            </style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-            <style>#map {
-                position:absolute;
-                top:0;
-                bottom:0;
-                right:0;
-                left:0;
-                }
-            </style>
+<style>
+  body, html { margin:0; padding:0; height:100%; }
+  #map { height: 100%; width: 100%; }
 
-            <script>
-                L_NO_TOUCH = false;
-                L_DISABLE_3D = false;
-            </script>
+  #info {
+    position: absolute;
+    top: 10px; left: 10px;
+    background: rgba(255,255,255,0.9);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-family: sans-serif;
+    z-index: 9999;
+    max-width: 280px;
+  }
 
-        
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.1.0/leaflet.markercluster.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.1.0/MarkerCluster.css"/>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.1.0/MarkerCluster.Default.css"/>
+  button {
+    margin-top: 5px;
+    width: 100%;
+  }
+</style>
 </head>
+
 <body>
-    
-    
-            <div class="folium-map" id="map_dcbebdeaf6e98ff45e7dadd1b55c2ee1" ></div>
-        
-</body>
+
+<div id="info">
+  <b>ポイント一覧</b><br>
+  <div id="pointList"></div>
+  <hr>
+  1回目 → レンタルポイント（赤）<br>
+  2回目 → 返却ポイント（青）<br>
+  <button id="undoBtn">取り消し（Undo）</button>
+</div>
+
+<div id="map"></div>
+
 <script>
-    
-    
-            var map_dcbebdeaf6e98ff45e7dadd1b55c2ee1 = L.map(
-                "map_dcbebdeaf6e98ff45e7dadd1b55c2ee1",
-                {
-                    center: [36.2048, 138.2529],
-                    crs: L.CRS.EPSG3857,
-                    ...{
-  "zoom": 5,
-  "zoomControl": true,
-  "preferCanvas": false,
-}
+const map = L.map("map").setView([35.681236, 139.767125], 14);
 
-                }
-            );
+// OpenStreetMap
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: "© OpenStreetMap contributors",
+}).addTo(map);
 
-            
+// 連番カウンタ
+let rentalCount = 1;
+let returnCount = 1;
 
-        
-    
-            var tile_layer_18d17e91a79eb6772de3d26507fc8404 = L.tileLayer(
-                "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-                {
-  "minZoom": 0,
-  "maxZoom": 19,
-  "maxNativeZoom": 19,
-  "noWrap": false,
-  "attribution": "\u0026copy; \u003ca href=\"https://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors",
-  "subdomains": "abc",
-  "detectRetina": false,
-  "tms": false,
-  "opacity": 1,
-}
+// 状態管理
+let rentalPoint = null;
+let returnPoint = null;
 
-            );
-        
-    
-            tile_layer_18d17e91a79eb6772de3d26507fc8404.addTo(map_dcbebdeaf6e98ff45e7dadd1b55c2ee1);
-        
-    
-            var marker_cluster_71bb761164b1b3dbc02eac837f31450c = L.markerClusterGroup(
-                {
-}
-            );
-        
-    
-            var marker_e80da55a4c5d4a327e8ba594ebbec623 = L.marker(
-                [35.6895, 139.6917],
-                {
-}
-            ).addTo(marker_cluster_71bb761164b1b3dbc02eac837f31450c);
-        
-    
-            var icon_7c2a016282b4f2b2725713adab2f38c2 = L.AwesomeMarkers.icon(
-                {
-  "markerColor": "blue",
-  "iconColor": "white",
-  "icon": "bicycle",
-  "prefix": "fa",
-  "extraClasses": "fa-rotate-0",
-}
-            );
-        
-    
-        var popup_9cea52120154cc928e9b99f2ed35101c = L.popup({
-  "maxWidth": "100%",
+// マーカー記録（Undo用）
+let markerHistory = [];
+
+const pointList = document.getElementById("pointList");
+
+// 赤マーカー
+const redIcon = new L.Icon({
+  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
+  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34]
 });
 
-        
-            
-                var html_b5921f85cd3150b2cc454c6f1b03cae8 = $(`<div id="html_b5921f85cd3150b2cc454c6f1b03cae8" style="width: 100.0%; height: 100.0%;">Tokyo Rental Point<br>Price per hour: ¥300<br>Return location: Any rental point in Tokyo</div>`)[0];
-                popup_9cea52120154cc928e9b99f2ed35101c.setContent(html_b5921f85cd3150b2cc454c6f1b03cae8);
-            
-        
-
-        marker_e80da55a4c5d4a327e8ba594ebbec623.bindPopup(popup_9cea52120154cc928e9b99f2ed35101c)
-        ;
-
-        
-    
-    
-                marker_e80da55a4c5d4a327e8ba594ebbec623.setIcon(icon_7c2a016282b4f2b2725713adab2f38c2);
-            
-    
-            var marker_472ed61d1085dd61aa871f7a91989db9 = L.marker(
-                [34.6937, 135.5023],
-                {
-}
-            ).addTo(marker_cluster_71bb761164b1b3dbc02eac837f31450c);
-        
-    
-            var icon_9f3cb0fada252dcc4a6c86ed2e75b8f0 = L.AwesomeMarkers.icon(
-                {
-  "markerColor": "blue",
-  "iconColor": "white",
-  "icon": "bicycle",
-  "prefix": "fa",
-  "extraClasses": "fa-rotate-0",
-}
-            );
-        
-    
-        var popup_75f790f5194f2c1d77fc2343b7f45df4 = L.popup({
-  "maxWidth": "100%",
+// 青マーカー
+const blueIcon = new L.Icon({
+  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png",
+  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34]
 });
 
-        
-            
-                var html_cdb18d11433e11604b609829c8aeef10 = $(`<div id="html_cdb18d11433e11604b609829c8aeef10" style="width: 100.0%; height: 100.0%;">Osaka Rental Point<br>Price per hour: ¥250<br>Return location: Any rental point in Osaka</div>`)[0];
-                popup_75f790f5194f2c1d77fc2343b7f45df4.setContent(html_cdb18d11433e11604b609829c8aeef10);
-            
-        
+// Haversine 距離計算
+function calcDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371e3;
+  const toRad = deg => deg * Math.PI / 180;
 
-        marker_472ed61d1085dd61aa871f7a91989db9.bindPopup(popup_75f790f5194f2c1d77fc2343b7f45df4)
-        ;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
 
-        
-    
-    
-                marker_472ed61d1085dd61aa871f7a91989db9.setIcon(icon_9f3cb0fada252dcc4a6c86ed2e75b8f0);
-            
-    
-            var marker_8064c0e79cefe7828c8c7dc2a8e07cec = L.marker(
-                [35.0116, 135.7681],
-                {
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) *
+    Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) ** 2;
+
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
-            ).addTo(marker_cluster_71bb761164b1b3dbc02eac837f31450c);
-        
-    
-            var icon_eaa33bb6234cdee0b341d3f52de2b701 = L.AwesomeMarkers.icon(
-                {
-  "markerColor": "blue",
-  "iconColor": "white",
-  "icon": "bicycle",
-  "prefix": "fa",
-  "extraClasses": "fa-rotate-0",
+
+// リスト追加
+function addToList(text) {
+  pointList.innerHTML += text + "<br>";
 }
-            );
-        
-    
-        var popup_ccdf4368a52c202fa89d3aa6d244719d = L.popup({
-  "maxWidth": "100%",
+
+// リスト削除（最後の1行）
+function removeLastFromList() {
+  let lines = pointList.innerHTML.trim().split("<br>");
+  lines.pop();
+  pointList.innerHTML = lines.join("<br>") + (lines.length ? "<br>" : "");
+}
+
+// Undoボタン
+document.getElementById("undoBtn").onclick = function () {
+  if (markerHistory.length === 0) return;
+
+  const last = markerHistory.pop();
+  map.removeLayer(last.marker);
+  removeLastFromList();
+
+  if (last.type === "rental") {
+    rentalCount--;       // 番号戻す
+    rentalPoint = null;  // 再入力可能に戻す
+  } else {
+    returnCount--;
+    returnPoint = null;
+  }
+};
+
+map.on("click", function (e) {
+  const lat = e.latlng.lat.toFixed(6);
+  const lng = e.latlng.lng.toFixed(6);
+
+  // ---- レンタル（赤） ----
+  if (!rentalPoint) {
+    const name = `レンタルポイント${rentalCount++}`;
+
+    const marker = L.marker([lat, lng], { icon: redIcon })
+      .addTo(map)
+      .bindPopup(`<b>${name}</b><br>緯度: ${lat}<br>経度: ${lng}`)
+      .openPopup();
+
+    rentalPoint = { lat, lng, name };
+
+    markerHistory.push({ marker, type: "rental" });
+    addToList(name);
+
+    return;
+  }
+
+  // ---- 返却（青） ----
+  if (!returnPoint) {
+    const name = `返却ポイント${returnCount++}`;
+
+    const marker = L.marker([lat, lng], { icon: blueIcon })
+      .addTo(map)
+      .bindPopup(`<b>${name}</b><br>緯度: ${lat}<br>経度: ${lng}`)
+      .openPopup();
+
+    returnPoint = { lat, lng, name };
+
+    markerHistory.push({ marker, type: "return" });
+    addToList(name);
+
+    // 距離計算
+    const dist = calcDistance(rentalPoint.lat, rentalPoint.lng, lat, lng);
+    const distKm = (dist / 1000).toFixed(2);
+    const price = Math.round(distKm * 100);
+
+    alert(
+      `${rentalPoint.name} → ${returnPoint.name}\n` +
+      `距離: ${distKm} km\n料金: ¥${price}`
+    );
+
+    // ポップアップ更新
+    marker.bindPopup(
+      `<b>${name}</b><br>` +
+      `距離: ${distKm} km<br>` +
+      `料金: ¥${price}`
+    ).openPopup();
+
+    // 次の入力のためリセット
+    rentalPoint = null;
+    returnPoint = null;
+
+    return;
+  }
 });
-
-        
-            
-                var html_c8c23528d697bc86a1641ca5bb8d844b = $(`<div id="html_c8c23528d697bc86a1641ca5bb8d844b" style="width: 100.0%; height: 100.0%;">Kyoto Rental Point<br>Price per hour: ¥200<br>Return location: Any rental point in Kyoto</div>`)[0];
-                popup_ccdf4368a52c202fa89d3aa6d244719d.setContent(html_c8c23528d697bc86a1641ca5bb8d844b);
-            
-        
-
-        marker_8064c0e79cefe7828c8c7dc2a8e07cec.bindPopup(popup_ccdf4368a52c202fa89d3aa6d244719d)
-        ;
-
-        
-    
-    
-                marker_8064c0e79cefe7828c8c7dc2a8e07cec.setIcon(icon_eaa33bb6234cdee0b341d3f52de2b701);
-            
-    
-            marker_cluster_71bb761164b1b3dbc02eac837f31450c.addTo(map_dcbebdeaf6e98ff45e7dadd1b55c2ee1);
-        
-    
-            tile_layer_18d17e91a79eb6772de3d26507fc8404.addTo(map_dcbebdeaf6e98ff45e7dadd1b55c2ee1);
-        
-    
-                marker_e80da55a4c5d4a327e8ba594ebbec623.setIcon(icon_7c2a016282b4f2b2725713adab2f38c2);
-            
-    
-                marker_472ed61d1085dd61aa871f7a91989db9.setIcon(icon_9f3cb0fada252dcc4a6c86ed2e75b8f0);
-            
-    
-                marker_8064c0e79cefe7828c8c7dc2a8e07cec.setIcon(icon_eaa33bb6234cdee0b341d3f52de2b701);
-            
-    
-            marker_cluster_71bb761164b1b3dbc02eac837f31450c.addTo(map_dcbebdeaf6e98ff45e7dadd1b55c2ee1);
-        
-    
-            var marker_b042a4f810711a2cf63ba64ff5cdb4e5 = L.marker(
-                [35.1815, 136.9066],
-                {
-}
-            ).addTo(marker_cluster_71bb761164b1b3dbc02eac837f31450c);
-        
-    
-            var icon_8b7d71363e89cec81de94f751224e922 = L.AwesomeMarkers.icon(
-                {
-  "markerColor": "blue",
-  "iconColor": "white",
-  "icon": "bicycle",
-  "prefix": "fa",
-  "extraClasses": "fa-rotate-0",
-}
-            );
-        
-    
-        var popup_a687a76a09050b15117d9c22f6e893a7 = L.popup({
-  "maxWidth": "100%",
-});
-
-        
-            
-                var html_55ea0b9f9e3bb99fe42b5982997ec153 = $(`<div id="html_55ea0b9f9e3bb99fe42b5982997ec153" style="width: 100.0%; height: 100.0%;">Nagoya Rental Point<br>Price per hour: ¥220<br>Return location: Any rental point in Nagoya</div>`)[0];
-                popup_a687a76a09050b15117d9c22f6e893a7.setContent(html_55ea0b9f9e3bb99fe42b5982997ec153);
-            
-        
-
-        marker_b042a4f810711a2cf63ba64ff5cdb4e5.bindPopup(popup_a687a76a09050b15117d9c22f6e893a7)
-        ;
-
-        
-    
-    
-                marker_b042a4f810711a2cf63ba64ff5cdb4e5.setIcon(icon_8b7d71363e89cec81de94f751224e922);
-            
 </script>
+
+</body>
 </html>
