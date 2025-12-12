@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Rencle Bike Map</title>
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+
+    <!-- MarkerCluster -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
+    <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+
+    <!-- Bootstrap -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+
+    <style>
+        #map_dcbebdeaf6e98ff45e7dadd1b55c2ee1 {
+            width: 100%;
+            height: 90vh;
+        }
+    </style>
+</head>
+<body>
+
+<h3 class="text-center mt-2">Rencle マップ（タグ付き対応版）</h3>
+
+<div id="map_dcbebdeaf6e98ff45e7dadd1b55c2ee1"></div>
+
+<!-- ★ モーダル（ポイント登録） -->
+<div class="modal fade" id="addPointModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">貸出ポイントの追加</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body">
+
+        <div class="mb-3">
+          <label class="form-label">ポイント名</label>
+          <input id="pointName" class="form-control">
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">料金（1時間）</label>
+          <input id="pointPrice" type="number" class="form-control">
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">返却場所</label>
+          <input id="pointReturn" class="form-control">
+        </div>
+
+        <!-- ★ タグ追加 -->
+        <div class="mb-3">
+          <label class="form-label">利用可能条件（タグ）</label><br>
+
+          <input type="checkbox" class="tag-check" value="6時間以上貸出可"> 6時間以上貸出可<br>
+          <input type="checkbox" class="tag-check" value="夜間貸出可"> 夜間貸出可<br>
+          <input type="checkbox" class="tag-check" value="長距離利用可"> 長距離利用可<br>
+        </div>
+
+        <!-- 隠しフィールド（クリックした場所の座標を入れる） -->
+        <input type="hidden" id="lat">
+        <input type="hidden" id="lng">
+
+      </div>
+
+      <div class="modal-footer">
+        <button id="savePointBtn" class="btn btn-primary">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ======================
+// 地図表示
+// ======================
+
+var map = L.map("map_dcbebdeaf6e98ff45e7dadd1b55c2ee1", {
+    center: [36.2048, 138.2529],
+    zoom: 5
+});
+
+var tile = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png");
+tile.addTo(map);
+
+// MarkerCluster
+var myMarkerCluster = L.markerClusterGroup();
+map.addLayer(myMarkerCluster);
+
+// ★ アイコン（自転車）
+function makeBikeIcon() {
+    return L.icon({
+        iconUrl: "https://cdn-icons-png.flaticon.com/512/3202/3202926.png",
+        iconSize: [35, 35]
+    });
+}
+
+// ======================
+// localStorage 関連
+// ======================
+function loadPoints() {
+    var data = localStorage.getItem("rencle_points");
+    return data ? JSON.parse(data) : [];
+}
+
+function savePointToStorage(point) {
+    var list = loadPoints();
+    list.push(point);
+    localStorage.setItem("rencle_points", JSON.stringify(list));
+}
+
+// ======================
+// ポップアップ HTML
+// ======================
+function makePopupHTML(p) {
+    var tagHTML = (p.tags && p.tags.length > 0)
+        ? "<br><b>タグ:</b> " + p.tags.join(", ")
+        : "";
+
+    return `
+        <b>${p.name}</b><br>
+        料金: ¥${p.price_per_hour}<br>
+        返却場所: ${p.return_location}
+        ${tagHTML}
+    `;
+}
+
+// ======================
+// 地図クリック → モーダル表示
+// ======================
+map.on("click", function(e) {
+    $("#lat").val(e.latlng.lat);
+    $("#lng").val(e.latlng.lng);
+
+    // チェックボックスをリセット
+    $(".tag-check").prop("checked", false);
+
+    var modal = new bootstrap.Modal(document.getElementById("addPointModal"));
+    modal.show();
+});
+
+// ======================
+// 保存処理
+// ======================
+$("#savePointBtn").on("click", function() {
+
+    var name = $("#pointName").val().trim();
+    var price = parseInt($("#pointPrice").val());
+    var ret = $("#pointReturn").val().trim();
+    var lat = parseFloat($("#lat").val());
+    var lng = parseFloat($("#lng").val());
+
+    if (!name || isNaN(price) || !ret) {
+        alert("すべて入力してください");
+        return;
+    }
+
+    // ★ タグ取得
+    var tags = [];
+    $(".tag-check:checked").each(function() {
+        tags.push($(this).val());
+    });
+
+    var point = {
+        name: name,
+        price_per_hour: price,
+        return_location: ret,
+        lat: lat,
+        lng: lng,
+        tags: tags        // ←追加
+    };
+
+    // マーカー追加
+    var m = L.marker([lat, lng], {icon: makeBikeIcon()})
+            .bindPopup(makePopupHTML(point));
+    myMarkerCluster.addLayer(m);
+
+    // 保存
+    savePointToStorage(point);
+
+    // モーダル閉じる
+    var modal = bootstrap.Modal.getInstance(document.getElementById("addPointModal"));
+    modal.hide();
+});
+
+// ======================
+// 初回読み込み時に復元
+// ======================
+$(function() {
+    var list = loadPoints();
+
+    list.forEach(function(p) {
+        var m = L.marker([p.lat, p.lng], {icon: makeBikeIcon()})
+                .bindPopup(makePopupHTML(p));
+
+        myMarkerCluster.addLayer(m);
+    });
+});
+</script>
+
+</body>
+</html>
